@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="../src/output.css" />
+  </head>
+  <body class="bg-transparent">
+    <nav class="flex justify-center h-[600px]">
+      <ul class="flex flex-col items-center p-5 gap-8 relative h-full">
+        <li
+          class="cursor-pointer group hover:bg-amber-50/20 p-2 rounded-lg transition nav-item"
+          data-page="dashboard"
+        >
+          <img
+            src="../asset/shield-user.svg"
+            class="w-8 invert brightness-100"
+          />
+        </li>
+        <li
+          class="cursor-pointer group hover:bg-amber-50/20 p-2 rounded-lg transition nav-item"
+          data-page="alerts"
+        >
+          <img
+            src="../asset/shield-alert.svg"
+            class="w-8 invert brightness-100"
+          />
+        </li>
+        <li
+          class="cursor-pointer group hover:bg-amber-50/20 p-2 rounded-lg transition nav-item"
+          data-page="history"
+        >
+          <img src="../asset/history.svg" class="w-8 invert brightness-100" />
+        </li>
+        <li
+          class="absolute bottom-5 cursor-pointer group hover:bg-amber-50/20 p-2 rounded-lg transition nav-item"
+          data-page="settings"
+        >
+          <img src="../asset/settings.svg" class="w-8 invert brightness-100" />
+        </li>
+      </ul>
+    </nav>
+
+    <script src="../js/navbar.js"></script>
+  </body>
+</html>

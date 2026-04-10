@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="../src/output.css" />
+  </head>
+  <body class="bg-transparent text-white p-4">
+    <h2 class="text-xl font-bold mb-4">Security Alerts</h2>
+
+    <div class="space-y-3" id="alertsList">
+      <div class="text-center opacity-70 py-4">Loading...</div>
+    </div>
+
+    <button
+      id="clearAlerts"
+      class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition"
+    >
+      Clear All Alerts
+    </button>
+
+    <script src="../js/alert.js"></script>
+  </body>
+</html>

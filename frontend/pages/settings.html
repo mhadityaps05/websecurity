@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="../src/output.css" />
+    <style>
+      .toggle {
+        width: 40px;
+        height: 20px;
+        background-color: #ccc;
+        border-radius: 10px;
+        appearance: none;
+        cursor: pointer;
+        position: relative;
+      }
+      .toggle:checked {
+        background-color: #4caf50;
+      }
+      .toggle:before {
+        content: "";
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        background-color: white;
+        border-radius: 50%;
+        top: 1px;
+        left: 1px;
+        transition: transform 0.2s;
+      }
+      .toggle:checked:before {
+        transform: translateX(20px);
+      }
+    </style>
+  </head>
+  <body class="bg-transparent text-white p-4">
+    <h2 class="text-xl font-bold mb-6">Settings</h2>
+
+    <div class="space-y-4">
+      <div class="bg-white/10 rounded-lg p-4">
+        <h3 class="font-semibold mb-3">Notifications</h3>
+
+        <label class="flex items-center justify-between mb-2">
+          <span class="text-sm">Enable notifications</span>
+          <input type="checkbox" class="toggle" checked />
+        </label>
+
+        <label class="flex items-center justify-between mb-2">
+          <span class="text-sm">Sound alerts</span>
+          <input type="checkbox" class="toggle" />
+        </label>
+
+        <label class="flex items-center justify-between">
+          <span class="text-sm">Desktop notifications</span>
+          <input type="checkbox" class="toggle" checked />
+        </label>
+      </div>
+
+      <div class="bg-white/10 rounded-lg p-4">
+        <h3 class="font-semibold mb-3">Scan Options</h3>
+
+        <label class="flex items-center justify-between mb-2">
+          <span class="text-sm">Auto-scan new pages</span>
+          <input type="checkbox" class="toggle" checked />
+        </label>
+
+        <label class="flex items-center justify-between">
+          <span class="text-sm">Deep scan</span>
+          <input type="checkbox" class="toggle" />
+        </label>
+      </div>
+
+      <div class="bg-red-500/20 rounded-lg p-4 border border-red-500">
+        <h3 class="font-semibold mb-3 text-red-300">Danger Zone</h3>
+
+        <button
+          class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg transition mb-2"
+        >
+          Clear All Data
+        </button>
+
+        <button
+          class="w-full bg-transparent border border-red-500 text-red-300 hover:bg-red-500/20 py-2 rounded-lg transition"
+        >
+          Reset Extension
+        </button>
+      </div>
+    </div>
+  </body>
+  <script>
+    window.addEventListener("message", (event) => {
+      if (event.data.type === "UPDATE_DATA") {
+        const data = event.data.data
+
+        document.getElementById("riskScore").textContent = data.risk_score
+
+        const levelEl = document.getElementById("riskLevel")
+        levelEl.textContent = data.risk_level
+
+        levelEl.className = `px-3 py-1 rounded-full text-sm ${
+          data.risk_level.toLowerCase() === "high"
+            ? "bg-red-500"
+            : data.risk_level.toLowerCase() === "medium"
+              ? "bg-yellow-500"
+              : "bg-green-500"
+        }`
+
+        document.getElementById("message").textContent = data.message
+
+        const reasonsList = document.getElementById("reasonsList")
+        reasonsList.innerHTML = data.reasons
+          .map((r) => `<li>🔴 ${r}</li>`)
+          .join("")
+      }
+    })
+
+    window.parent.postMessage({ type: "PAGE_LOADED", page: "dashboard" }, "*")
+  </script>
+</html>

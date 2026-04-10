@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Web Security Guard",
+  "version": "1.0",
+  "description": "Website security analyzer",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "webNavigation",
+    "scripting",
+    "cookies",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*"
+  ],
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Web Security"
+  }
+}

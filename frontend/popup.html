@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web Security</title>
+    <link rel="stylesheet" href="src/output.css" />
+  </head>
+  <body
+    class="w-[450px] min-h-[600px] bg-gray-50 bg-[url('/asset/background.svg')] bg-cover bg-center text-white"
+  >
+    <div class="flex">
+      <!-- Navbar -->
+      <div class="w-[85px] bg-[#09094A]">
+        <iframe
+          src="components/navbar.html"
+          class="h-[600px] w-[85px] border-0"
+          id="navbarFrame"
+        ></iframe>
+      </div>
+
+      <!-- Content Area dengan Iframe yang berubah -->
+      <div class="flex-1">
+        <iframe
+          src="pages/dashboard.html"
+          class="h-[600px] w-full border-0"
+          id="contentFrame"
+        ></iframe>
+      </div>
+    </div>
+
+    <script src="js/navigation.js"></script>
+    <script type="module" src="js/analyzer.js"></script>
+  </body>
+</html>
