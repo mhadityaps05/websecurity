@@ -5,12 +5,19 @@ console.log("Background service worker running")
 const BASE_URL = "http://localhost:8000"
 const SCAN_DEBOUNCE_MS = 900
 const RESCAN_COOLDOWN_MS = 8000
+const DEFAULT_SETTINGS = {
+  notificationsEnabled: true,
+  soundAlerts: false,
+  desktopNotifications: true,
+  autoScan: true,
+}
 
 const scanTimers = new Map()
 const lastScanByTab = new Map()
 const redirectCounts = new Map()
 const currentUrls = new Map()
 const notificationTabs = new Map()
+let creatingOffscreenDocument = null
 
 function isScannableUrl(url) {
   return typeof url === "string" && /^https?:\/\//i.test(url)
@@ -34,6 +41,121 @@ function chromeStorageSet(data) {
   return new Promise((resolve) => {
     chrome.storage.local.set(data, resolve)
   })
+}
+
+function chromeStorageRemove(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.remove(keys, resolve)
+  })
+}
+
+function queryTabs(queryInfo) {
+  return new Promise((resolve) => {
+    chrome.tabs.query(queryInfo, resolve)
+  })
+}
+
+async function getSettings() {
+  const stored = await chromeStorageGet(["extensionSettings"])
+  return {
+    ...DEFAULT_SETTINGS,
+    ...(stored.extensionSettings || {}),
+  }
+}
+
+async function saveSettings(settings) {
+  const nextSettings = {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+  }
+
+  await chromeStorageSet({ extensionSettings: nextSettings })
+  return nextSettings
+}
+
+async function clearAllTabBadges() {
+  const tabs = await queryTabs({})
+
+  tabs.forEach((tab) => {
+    if (typeof tab.id !== "number") return
+
+    chrome.action.setBadgeText({ tabId: tab.id, text: "" })
+    chrome.action.setTitle({
+      tabId: tab.id,
+      title: "Web Security",
+    })
+  })
+}
+
+async function clearExtensionData() {
+  await chromeStorageRemove([
+    "analysisHistory",
+    "lastAnalysis",
+    "lastPageData",
+    "scanHistory",
+    "timestamp",
+  ])
+
+  await clearAllTabBadges()
+}
+
+async function hasOffscreenDocument() {
+  const offscreenUrl = chrome.runtime.getURL("offscreen.html")
+
+  if (chrome.runtime.getContexts) {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"],
+      documentUrls: [offscreenUrl],
+    })
+
+    return contexts.length > 0
+  }
+
+  if (chrome.offscreen?.hasDocument) {
+    return chrome.offscreen.hasDocument()
+  }
+
+  return false
+}
+
+async function ensureOffscreenDocument() {
+  if (!chrome.offscreen) return false
+
+  if (await hasOffscreenDocument()) {
+    return true
+  }
+
+  if (creatingOffscreenDocument) {
+    await creatingOffscreenDocument
+    return true
+  }
+
+  creatingOffscreenDocument = chrome.offscreen
+    .createDocument({
+      url: "offscreen.html",
+      reasons: ["AUDIO_PLAYBACK"],
+      justification: "Play a short security alert sound for risky websites.",
+    })
+    .finally(() => {
+      creatingOffscreenDocument = null
+    })
+
+  await creatingOffscreenDocument
+  return true
+}
+
+async function playSoundAlert(status) {
+  try {
+    const ready = await ensureOffscreenDocument()
+    if (!ready) return
+
+    await chrome.runtime.sendMessage({
+      type: "PLAY_ALERT_SOUND",
+      status,
+    })
+  } catch (error) {
+    console.warn("Sound alert gagal diputar:", error)
+  }
 }
 
 function getCookiesForUrl(url) {
@@ -276,12 +398,27 @@ async function showPageToast(tabId, result) {
 async function handleAlert(tabId, result) {
   if (result.status !== "Waspada" && result.status !== "Berisiko") return
 
-  showBrowserNotification(tabId, result)
+  const settings = await getSettings()
+  if (!settings.notificationsEnabled) return
+
+  if (settings.desktopNotifications) {
+    showBrowserNotification(tabId, result)
+  }
+
+  if (settings.soundAlerts) {
+    await playSoundAlert(result.status)
+  }
+
   await showPageToast(tabId, result)
 }
 
-async function scanTab(tabId, url) {
+async function scanTab(tabId, url, options = {}) {
   if (!isScannableUrl(url)) return
+
+  if (!options.force) {
+    const settings = await getSettings()
+    if (!settings.autoScan) return
+  }
 
   const previous = lastScanByTab.get(tabId)
   const now = Date.now()
@@ -324,9 +461,24 @@ async function scanTab(tabId, url) {
   }
 }
 
-function scheduleScan(tabId, url) {
+async function scheduleScan(tabId, url) {
   if (!isScannableUrl(url)) {
     chrome.action.setBadgeText({ tabId, text: "" })
+    return
+  }
+
+  const settings = await getSettings()
+  if (!settings.autoScan) {
+    if (scanTimers.has(tabId)) {
+      clearTimeout(scanTimers.get(tabId))
+      scanTimers.delete(tabId)
+    }
+
+    chrome.action.setBadgeText({ tabId, text: "" })
+    chrome.action.setTitle({
+      tabId,
+      title: "Web Security: auto-scan off",
+    })
     return
   }
 
@@ -426,11 +578,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true
   }
 
+  if (message.type === "GET_EXTENSION_SETTINGS") {
+    getSettings().then((settings) => {
+      sendResponse({ status: "ok", settings })
+    })
+    return true
+  }
+
+  if (message.type === "UPDATE_EXTENSION_SETTINGS") {
+    ;(async () => {
+      const settings = await saveSettings(message.settings || {})
+
+      if (!settings.autoScan) {
+        await clearAllTabBadges()
+      } else {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          const tab = tabs?.[0]
+          if (tab?.id && isScannableUrl(tab.url)) {
+            scheduleScan(tab.id, tab.url)
+          }
+        })
+      }
+
+      sendResponse({ status: "ok", settings })
+    })()
+
+    return true
+  }
+
+  if (message.type === "CLEAR_EXTENSION_DATA") {
+    ;(async () => {
+      await clearExtensionData()
+      sendResponse({ status: "ok" })
+    })()
+
+    return true
+  }
+
+  if (message.type === "RESET_EXTENSION") {
+    ;(async () => {
+      await clearExtensionData()
+      const settings = await saveSettings(DEFAULT_SETTINGS)
+      sendResponse({ status: "ok", settings })
+    })()
+
+    return true
+  }
+
   if (message.type === "REQUEST_TAB_SCAN") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs?.[0]
       if (tab?.id && isScannableUrl(tab.url)) {
-        scanTab(tab.id, tab.url)
+        scanTab(tab.id, tab.url, { force: true })
         sendResponse({ status: "queued" })
       } else {
         sendResponse({ status: "ignored" })

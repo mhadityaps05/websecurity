@@ -20,17 +20,27 @@
 
         <label class="setting-row">
           <span class="setting-label">Enable notifications</span>
-          <input type="checkbox" class="toggle" checked />
+          <input
+            id="notificationsEnabled"
+            type="checkbox"
+            class="toggle"
+            checked
+          />
         </label>
 
         <label class="setting-row">
           <span class="setting-label">Sound alerts</span>
-          <input type="checkbox" class="toggle" />
+          <input id="soundAlerts" type="checkbox" class="toggle" />
         </label>
 
         <label class="setting-row">
           <span class="setting-label">Desktop notifications</span>
-          <input type="checkbox" class="toggle" checked />
+          <input
+            id="desktopNotifications"
+            type="checkbox"
+            class="toggle"
+            checked
+          />
         </label>
       </section>
 
@@ -39,28 +49,28 @@
 
         <label class="setting-row">
           <span class="setting-label">Auto-scan new pages</span>
-          <input type="checkbox" class="toggle" checked />
-        </label>
-
-        <label class="setting-row">
-          <span class="setting-label">Deep scan</span>
-          <input type="checkbox" class="toggle" />
+          <input id="autoScan" type="checkbox" class="toggle" checked />
         </label>
       </section>
 
       <section class="panel settings-panel danger-panel">
         <h3 class="settings-title text-red-200">Danger Zone</h3>
 
-        <button class="action-button action-danger mb-2">
+        <button id="clearAllData" class="action-button action-danger mb-2">
           Clear All Data
         </button>
 
         <button
+          id="resetExtension"
           class="action-button border border-red-400/40 bg-transparent text-red-100 hover:bg-red-500/15"
         >
           Reset Extension
         </button>
       </section>
+
+      <p id="settingsStatus" class="card-meta" role="status"></p>
     </div>
+
+    <script src="../js/settings.js"></script>
   </body>
 </html>

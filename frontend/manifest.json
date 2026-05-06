@@ -10,7 +10,8 @@
     "webNavigation",
     "scripting",
     "cookies",
-    "notifications"
+    "notifications",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>",
