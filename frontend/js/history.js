@@ -2,7 +2,6 @@
 
 console.log("History.js loaded")
 
-// Data history disimpan di chrome.storage.local dengan key "scanHistory"
 let currentFilter = "all"
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -10,7 +9,6 @@ document.addEventListener("DOMContentLoaded", () => {
   loadHistory()
   setupFilters()
 
-  // Tombol clear history
   const clearBtn = document.getElementById("clearHistoryBtn")
   if (clearBtn) {
     clearBtn.addEventListener("click", clearHistory)
@@ -28,45 +26,60 @@ function loadHistory() {
 function setupFilters() {
   document.querySelectorAll(".filter-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      // Update active class
-      document.querySelectorAll(".filter-btn").forEach((b) => {
-        b.classList.remove("bg-white/20")
-        b.classList.add("bg-white/10")
+      document.querySelectorAll(".filter-btn").forEach((item) => {
+        item.classList.remove("is-active")
       })
-      btn.classList.remove("bg-white/10")
-      btn.classList.add("bg-white/20")
+      btn.classList.add("is-active")
 
-      // Update filter
       currentFilter = btn.dataset.filter
       console.log("Filter changed to:", currentFilter)
-
-      // Reload with filter
       loadHistory()
     })
   })
+}
+
+function normalizeStatus(status) {
+  return status?.toLowerCase() || "aman"
 }
 
 function applyFilter(history, filter) {
   let filtered = [...history]
 
   if (filter === "safe") {
-    filtered = history.filter((h) => {
-      const status = h.status?.toLowerCase()
-      return status === "aman"
-    })
+    filtered = history.filter((h) => normalizeStatus(h.status) === "aman")
   } else if (filter === "suspicious") {
-    filtered = history.filter((h) => {
-      const status = h.status?.toLowerCase()
-      return status === "waspada"
-    })
+    filtered = history.filter((h) => normalizeStatus(h.status) === "waspada")
   } else if (filter === "danger") {
-    filtered = history.filter((h) => {
-      const status = h.status?.toLowerCase()
-      return status === "berisiko"
-    })
+    filtered = history.filter((h) => normalizeStatus(h.status) === "berisiko")
   }
 
   renderHistory(filtered)
+}
+
+function getStatusPresentation(status) {
+  const normalized = normalizeStatus(status)
+
+  if (normalized === "berisiko") {
+    return {
+      cardClass: "history-card--danger",
+      badgeClass: "status-danger",
+      label: "Danger",
+    }
+  }
+
+  if (normalized === "waspada") {
+    return {
+      cardClass: "history-card--warning",
+      badgeClass: "status-warning",
+      label: "Suspicious",
+    }
+  }
+
+  return {
+    cardClass: "history-card--safe",
+    badgeClass: "status-safe",
+    label: "Safe",
+  }
 }
 
 function renderHistory(history) {
@@ -75,12 +88,12 @@ function renderHistory(history) {
 
   if (!history.length) {
     el.innerHTML = `
-      <div class="text-center opacity-70 py-8">
-        <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div class="empty-state">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
         </svg>
         No scan history yet
-        <div class="text-xs mt-2 opacity-50">Visit websites to see scan results here</div>
+        <div class="empty-state-note">Visit websites to see scan results here</div>
       </div>
     `
     return
@@ -89,6 +102,10 @@ function renderHistory(history) {
   el.innerHTML = history
     .map((item, index) => {
       const date = new Date(item.time).toLocaleString()
+      const score = item.score ?? item.final_score
+      const reasons = item.reasons || item.analysis_details || []
+      const status = getStatusPresentation(item.status)
+
       let hostname = item.url || ""
       try {
         hostname = new URL(item.url).hostname
@@ -96,39 +113,28 @@ function renderHistory(history) {
         hostname = item.url
       }
 
-      let color = "bg-green-500"
-      let text = "Safe"
-
-      if (item.status === "Berisiko") {
-        color = "bg-red-500"
-        text = "Danger"
-      } else if (item.status === "Waspada") {
-        color = "bg-yellow-500"
-        text = "Suspicious"
-      }
-
       return `
-        <div class="bg-white/10 rounded-lg p-3 hover:bg-white/15 transition cursor-pointer history-item" data-url="${escapeHtml(item.url)}" data-index="${index}">
-          <div class="flex justify-between items-start">
-            <div class="flex-1">
-              <div class="font-medium">${escapeHtml(hostname)}</div>
-              <div class="text-xs opacity-70 mt-1">${date}</div>
-              ${item.score ? `<div class="text-xs opacity-50 mt-1">Score: ${item.score}/100</div>` : ""}
+        <div class="history-card ${status.cardClass} history-item" data-url="${escapeHtml(item.url)}" data-index="${index}">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="card-title break-words">${escapeHtml(hostname)}</div>
+              <div class="card-meta">${date}</div>
+              ${score ? `<div class="card-meta">Score: ${score}/100</div>` : ""}
             </div>
-            <span class="px-2 py-1 ${color} rounded-full text-xs whitespace-nowrap ml-2">${text}</span>
+            <span class="status-badge ${status.badgeClass}">${status.label}</span>
           </div>
           ${
-            item.reasons?.length
+            reasons.length
               ? `
-            <div class="mt-2 text-xs opacity-70 border-t border-white/10 pt-2">
+            <div class="card-details">
               <details>
-                <summary class="cursor-pointer">Details</summary>
-                <ul class="mt-1 space-y-1 pl-2">
-                  ${item.reasons
+                <summary>Details</summary>
+                <ul class="mt-2 space-y-1">
+                  ${reasons
                     .slice(0, 3)
-                    .map((r) => `<li>• ${escapeHtml(r)}</li>`)
+                    .map((reason) => `<li>- ${escapeHtml(reason)}</li>`)
                     .join("")}
-                  ${item.reasons.length > 3 ? `<li class="opacity-50">+${item.reasons.length - 3} more</li>` : ""}
+                  ${reasons.length > 3 ? `<li class="muted-copy">+${reasons.length - 3} more</li>` : ""}
                 </ul>
               </details>
             </div>
@@ -140,9 +146,12 @@ function renderHistory(history) {
     })
     .join("")
 
-  // Add click listeners to history items
   document.querySelectorAll(".history-item").forEach((item) => {
-    item.addEventListener("click", () => {
+    item.addEventListener("click", (event) => {
+      if (event.target.closest("details, summary, button, a")) {
+        return
+      }
+
       const url = item.dataset.url
       if (url && url !== "undefined") {
         console.log("Open URL:", url)
@@ -159,9 +168,6 @@ function escapeHtml(text) {
   return div.innerHTML
 }
 
-// =============================
-// CLEAR HISTORY FUNCTION
-// =============================
 function clearHistory() {
   if (
     confirm(
@@ -175,9 +181,6 @@ function clearHistory() {
   }
 }
 
-// =============================
-// EXPORT HISTORY (Opsional)
-// =============================
 function exportHistory() {
   chrome.storage.local.get(["scanHistory"], (result) => {
     const history = result.scanHistory || []
@@ -197,7 +200,6 @@ function exportHistory() {
   })
 }
 
-// Auto refresh setiap 5 detik
 setInterval(() => {
   loadHistory()
 }, 5000)

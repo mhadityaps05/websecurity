@@ -5,16 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="../src/output.css" />
   </head>
-  <body class="bg-transparent text-white p-4">
-    <h2 class="text-xl font-bold mb-4">Security Alerts</h2>
+  <body class="page-surface">
+    <header class="page-header">
+      <div>
+        <span class="page-kicker">Signals</span>
+        <h2 class="page-title">Security Alerts</h2>
+      </div>
+      <span class="header-pill">Watch</span>
+    </header>
 
-    <div class="space-y-3" id="alertsList">
-      <div class="text-center opacity-70 py-4">Loading...</div>
+    <div class="list-stack" id="alertsList">
+      <div class="empty-state">Loading...</div>
     </div>
 
     <button
       id="clearAlerts"
-      class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg transition"
+      class="action-button action-primary mt-3"
     >
       Clear All Alerts
     </button>

@@ -1,7 +1,7 @@
 // js/pages/alerts.js
 
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("Alerts loaded - History")
+  console.log("Alerts loaded")
   loadHistory()
 
   setInterval(loadHistory, 3000)
@@ -14,9 +14,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function loadHistory() {
   chrome.storage.local.get(["analysisHistory"], (result) => {
-    console.log("History dari storage:", result.analysisHistory?.length || 0)
+    console.log("Alerts dari storage:", result.analysisHistory?.length || 0)
     renderHistory(result.analysisHistory || [])
   })
+}
+
+function getAlertPresentation(status) {
+  const normalized = status?.toLowerCase()
+
+  if (normalized === "berisiko" || normalized === "danger") {
+    return {
+      cardClass: "alert-card--danger",
+      badgeClass: "status-danger",
+      label: "Danger",
+    }
+  }
+
+  if (normalized === "waspada" || normalized === "suspicious") {
+    return {
+      cardClass: "alert-card--warning",
+      badgeClass: "status-warning",
+      label: "Suspicious",
+    }
+  }
+
+  return {
+    cardClass: "alert-card--safe",
+    badgeClass: "status-safe",
+    label: "Safe",
+  }
 }
 
 function renderHistory(history) {
@@ -25,12 +51,12 @@ function renderHistory(history) {
 
   if (!history.length) {
     el.innerHTML = `
-      <div class="text-center opacity-70 py-8">
-        <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+      <div class="empty-state">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>
         </svg>
-        Belum ada history analisis
-        <div class="text-xs mt-2 opacity-50">Kunjungi website untuk melihat hasil analisis</div>
+        No alerts yet
+        <div class="empty-state-note">Risk signals will appear here</div>
       </div>
     `
     return
@@ -38,41 +64,37 @@ function renderHistory(history) {
 
   el.innerHTML = history
     .map((item, index) => {
-      let colorClass = "bg-blue-500/20 border-blue-500"
-      let icon = "🔵"
-
-      if (item.status === "Berisiko") {
-        colorClass = "bg-red-500/20 border-red-500"
-        icon = "🔴"
-      } else if (item.status === "Waspada") {
-        colorClass = "bg-yellow-500/20 border-yellow-500"
-        icon = "🟡"
-      }
+      const status = getAlertPresentation(item.status)
+      const details = item.analysis_details || item.reasons || []
+      const score = item.final_score ?? item.score
+      const title = item.title || item.url || "Unknown website"
+      const message = item.message || "Security signal detected"
+      const time = item.time ? new Date(item.time).toLocaleString() : ""
 
       return `
-        <div class="${colorClass} rounded-lg p-3 border-l-4 transition hover:scale-[1.02] cursor-pointer history-item" data-url="${escapeHtml(item.url)}">
-          <div class="flex items-start justify-between">
-            <div class="font-semibold">${icon} ${escapeHtml(item.title || item.url)}</div>
-            <div class="text-xs opacity-50">#${history.length - index}</div>
-          </div>
-          <div class="text-sm mt-1 opacity-90">${escapeHtml(item.message)}</div>
-          <div class="flex flex-wrap items-center justify-between mt-2 gap-2">
-            <div class="text-xs opacity-70">${new Date(item.time).toLocaleString()}</div>
-            <div class="flex gap-2">
-              <div class="text-xs px-2 py-1 rounded-full bg-white/10">Score: ${item.final_score}/100</div>
-              <div class="text-xs px-2 py-1 rounded-full bg-white/10">${item.status}</div>
+        <div class="alert-card ${status.cardClass} history-item" data-url="${escapeHtml(item.url)}">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="card-title break-words">${escapeHtml(title)}</div>
+              ${time ? `<div class="card-meta">${time}</div>` : ""}
             </div>
+            <span class="mini-chip">#${history.length - index}</span>
+          </div>
+          <div class="card-message">${escapeHtml(message)}</div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            ${score ? `<span class="mini-chip">Score: ${score}/100</span>` : ""}
+            <span class="status-badge ${status.badgeClass}">${status.label}</span>
           </div>
           ${
-            item.analysis_details?.length
+            details.length
               ? `
-            <div class="mt-2 text-xs opacity-70 border-t border-white/10 pt-2">
+            <div class="card-details">
               <details>
-                <summary class="cursor-pointer">Detail Analisis</summary>
-                <ul class="mt-1 space-y-1 pl-2">
-                  ${item.analysis_details
+                <summary>Detail Analisis</summary>
+                <ul class="mt-2 space-y-1">
+                  ${details
                     .slice(0, 3)
-                    .map((d) => `<li>• ${escapeHtml(d)}</li>`)
+                    .map((detail) => `<li>- ${escapeHtml(detail)}</li>`)
                     .join("")}
                 </ul>
               </details>
@@ -96,6 +118,10 @@ function attachClickListeners() {
 }
 
 function handleClick(event) {
+  if (event.target.closest("details, summary, button, a")) {
+    return
+  }
+
   const historyDiv = event.currentTarget
   const url = historyDiv.dataset.url
 
@@ -112,10 +138,10 @@ function escapeHtml(text) {
 }
 
 function clearHistory() {
-  if (confirm("Clear all history?")) {
+  if (confirm("Clear all alerts?")) {
     chrome.storage.local.set({ analysisHistory: [] }, () => {
       renderHistory([])
-      console.log("Semua history telah dihapus")
+      console.log("Semua alert telah dihapus")
     })
   }
 }
@@ -124,7 +150,7 @@ function exportHistory() {
   chrome.storage.local.get(["analysisHistory"], (result) => {
     const history = result.analysisHistory || []
     if (history.length === 0) {
-      alert("No history to export")
+      alert("No alerts to export")
       return
     }
 
@@ -133,7 +159,7 @@ function exportHistory() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `history_${new Date().toISOString().slice(0, 19)}.json`
+    a.download = `alerts_${new Date().toISOString().slice(0, 19)}.json`
     a.click()
     URL.revokeObjectURL(url)
   })
@@ -144,9 +170,8 @@ function addExportButton() {
   if (clearBtn && !document.getElementById("exportAlerts")) {
     const exportBtn = document.createElement("button")
     exportBtn.id = "exportAlerts"
-    exportBtn.textContent = "Export History"
-    exportBtn.className =
-      "w-full mt-2 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg transition"
+    exportBtn.textContent = "Export Alerts"
+    exportBtn.className = "action-button action-success mt-2"
     exportBtn.addEventListener("click", exportHistory)
     clearBtn.parentNode?.appendChild(exportBtn)
   }

@@ -39,12 +39,15 @@ function updateProgressBar(score) {
   if (normalizedScore <= 30) {
     scoreLabel.innerText = "Low Risk"
     scoreLabel.style.color = "#10b981"
+    scoreLabel.style.background = "rgba(34, 197, 94, 0.14)"
   } else if (normalizedScore <= 70) {
     scoreLabel.innerText = "Medium Risk"
     scoreLabel.style.color = "#f59e0b"
+    scoreLabel.style.background = "rgba(245, 158, 11, 0.14)"
   } else {
     scoreLabel.innerText = "High Risk"
     scoreLabel.style.color = "#ef4444"
+    scoreLabel.style.background = "rgba(239, 68, 68, 0.16)"
   }
 }
 
@@ -86,13 +89,12 @@ function updateUI(data) {
   if (data.analysis_details && data.analysis_details.length > 0) {
     data.analysis_details.forEach((reason) => {
       const li = document.createElement("li")
-      li.textContent = "• " + reason
-      li.className = "text-sm opacity-90"
+      li.textContent = reason
       reasonsEl.appendChild(li)
     })
   } else {
     reasonsEl.innerHTML =
-      "<li class='text-sm opacity-70'>Tidak ada indikasi masalah</li>"
+      "<li class='muted-copy'>Tidak ada indikasi masalah</li>"
   }
 
   // Simpan ke localStorage
@@ -100,6 +102,10 @@ function updateUI(data) {
     localStorage.setItem("lastAnalysis", JSON.stringify(data))
   } catch (e) {
     console.error("Gagal simpan ke localStorage:", e)
+  }
+
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    chrome.storage.local.set({ lastAnalysis: data })
   }
 }
 
@@ -122,7 +128,7 @@ window.addEventListener("message", (event) => {
 // LOAD DARI LOCALSTORAGE
 // =============================
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("DOM loaded, cek localStorage...")
+  console.log("DOM loaded, cek hasil analisis terakhir...")
 
   const saved = localStorage.getItem("lastAnalysis")
   if (saved) {
@@ -135,11 +141,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  if (typeof chrome !== "undefined" && chrome.storage?.local) {
+    chrome.storage.local.get(["lastAnalysis"], (result) => {
+      if (result.lastAnalysis) {
+        console.log("Load dari chrome.storage:", result.lastAnalysis)
+        updateUI(result.lastAnalysis)
+      }
+    })
+  }
+
   if (window.parent) {
     window.parent.postMessage({ type: "DASHBOARD_READY" }, "*")
     console.log("Kirim DASHBOARD_READY ke parent")
   }
 })
+
+if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && changes.lastAnalysis?.newValue) {
+      updateUI(changes.lastAnalysis.newValue)
+    }
+  })
+}
 
 // Inisialisasi progress bar
 updateProgressBar(0)

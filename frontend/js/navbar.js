@@ -16,9 +16,9 @@ document.querySelectorAll(".nav-item").forEach((item) => {
 
     // Update active class di navbar sendiri (visual feedback)
     document.querySelectorAll(".nav-item").forEach((nav) => {
-      nav.classList.remove("bg-amber-50/20")
+      nav.classList.remove("is-active")
     })
-    item.classList.add("bg-amber-50/20")
+    item.classList.add("is-active")
   })
 })
 
@@ -30,9 +30,9 @@ window.addEventListener("message", (event) => {
 
     document.querySelectorAll(".nav-item").forEach((nav) => {
       if (nav.dataset.page === activePage) {
-        nav.classList.add("bg-amber-50/20")
+        nav.classList.add("is-active")
       } else {
-        nav.classList.remove("bg-amber-50/20")
+        nav.classList.remove("is-active")
       }
     })
   }

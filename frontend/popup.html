@@ -6,27 +6,25 @@
     <title>Web Security</title>
     <link rel="stylesheet" href="src/output.css" />
   </head>
-  <body
-    class="w-[450px] min-h-[600px] bg-gray-50 bg-[url('/asset/background.svg')] bg-cover bg-center text-white"
-  >
-    <div class="flex">
-      <!-- Navbar -->
-      <div class="w-[85px] bg-[#09094A]">
+  <body class="app-shell">
+    <div class="app-layout">
+      <div class="nav-shell">
         <iframe
           src="components/navbar.html"
-          class="h-[600px] w-[85px] border-0"
+          class="frame-fill"
+          title="Navigation"
           id="navbarFrame"
         ></iframe>
       </div>
 
-      <!-- Content Area dengan Iframe yang berubah -->
-      <div class="flex-1">
+      <main class="content-shell">
         <iframe
           src="pages/dashboard.html"
-          class="h-[600px] w-full border-0"
+          class="frame-fill"
+          title="Web Security Content"
           id="contentFrame"
         ></iframe>
-      </div>
+      </main>
     </div>
 
     <script src="js/navigation.js"></script>
