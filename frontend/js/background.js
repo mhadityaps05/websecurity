@@ -31,6 +31,23 @@ function getHostname(url) {
   }
 }
 
+function getStatusLabel(status, score = 0) {
+  const normalized = status?.toLowerCase()
+
+  if (normalized === "danger" || normalized === "berisiko") return "Danger"
+  if (normalized === "suspicious" || normalized === "waspada") return "Suspicious"
+  if (normalized === "safe" || normalized === "aman") return "Safe"
+
+  if (score > 60) return "Danger"
+  if (score > 25) return "Suspicious"
+  return "Safe"
+}
+
+function isAlertStatus(status) {
+  const label = getStatusLabel(status)
+  return label === "Suspicious" || label === "Danger"
+}
+
 function chromeStorageGet(keys) {
   return new Promise((resolve) => {
     chrome.storage.local.get(keys, resolve)
@@ -258,13 +275,23 @@ async function analyzeWebsite(payload) {
 
 async function saveScanResult(result) {
   if (!result?.url) return
+  const statusLabel = getStatusLabel(result.status, result.final_score)
 
   const historyItem = {
     url: result.url,
     score: result.final_score,
-    status: result.status,
+    status: statusLabel,
     reasons: result.analysis_details || [],
     time: Date.now(),
+    cookies_count: result.cookies_count,
+    tracker_count: result.tracker_count,
+    iframe_count: result.iframe_count,
+    third_party_domains_count: result.third_party_domains_count,
+    domain_age_days: result.domain_age_days,
+    is_https: result.is_https,
+    redirect_count: result.redirect_count || 0,
+    permissions: result.permissions || {},
+    cookies: result.cookies || [],
   }
 
   const stored = await chromeStorageGet(["scanHistory", "analysisHistory"])
@@ -276,7 +303,7 @@ async function saveScanResult(result) {
     ? scanHistory
     : [historyItem, ...scanHistory].slice(0, 100)
 
-  const shouldAlert = result.status === "Waspada" || result.status === "Berisiko"
+  const shouldAlert = isAlertStatus(statusLabel)
   const nextAnalysisHistory = shouldAlert
     ? [historyItem, ...analysisHistory].slice(0, 100)
     : analysisHistory
@@ -299,11 +326,12 @@ function setBadge(tabId, result) {
   }
 
   const score = result.final_score ?? 0
+  const statusLabel = getStatusLabel(result.status, score)
 
-  if (result.status === "Berisiko") {
+  if (statusLabel === "Danger") {
     chrome.action.setBadgeText({ tabId, text: "!!" })
     chrome.action.setBadgeBackgroundColor({ tabId, color: "#dc2626" })
-  } else if (result.status === "Waspada") {
+  } else if (statusLabel === "Suspicious") {
     chrome.action.setBadgeText({ tabId, text: "!" })
     chrome.action.setBadgeBackgroundColor({ tabId, color: "#f59e0b" })
   } else {
@@ -313,12 +341,13 @@ function setBadge(tabId, result) {
 
   chrome.action.setTitle({
     tabId,
-    title: `Web Security: ${result.status} (${score}/100)`,
+    title: `Web Security: ${statusLabel} (${score}/100)`,
   })
 }
 
 function showBrowserNotification(tabId, result) {
   const score = result.final_score ?? 0
+  const statusLabel = getStatusLabel(result.status, score)
   const hostname = getHostname(result.url)
   const notificationId = `websecurity-${tabId}-${Date.now()}`
 
@@ -327,9 +356,9 @@ function showBrowserNotification(tabId, result) {
   chrome.notifications.create(notificationId, {
     type: "basic",
     iconUrl: "asset/shield-alert.svg",
-    title: `Web Security: ${result.status}`,
-    message: `${hostname} memiliki skor risiko ${score}/100.`,
-    priority: result.status === "Berisiko" ? 2 : 1,
+    title: `Web Security: ${statusLabel}`,
+    message: `${hostname} risk score ${score}/100.`,
+    priority: statusLabel === "Danger" ? 2 : 1,
   })
 }
 
@@ -342,8 +371,15 @@ async function showPageToast(tabId, result) {
         if (existing) existing.remove()
 
         const toast = document.createElement("div")
-        const isDanger = scanResult.status === "Berisiko"
         const score = scanResult.final_score ?? 0
+        const normalized = scanResult.status?.toLowerCase()
+        const statusLabel =
+          normalized === "danger" || normalized === "berisiko"
+            ? "Danger"
+            : normalized === "suspicious" || normalized === "waspada"
+              ? "Suspicious"
+              : "Safe"
+        const isDanger = statusLabel === "Danger"
         const reason = scanResult.analysis_details?.[0] || "Ada sinyal risiko pada halaman ini"
 
         toast.id = "websecurity-scan-toast"
@@ -366,11 +402,11 @@ async function showPageToast(tabId, result) {
         `
 
         const title = document.createElement("div")
-        title.textContent = `Web Security: ${scanResult.status}`
+        title.textContent = `Web Security: ${statusLabel}`
         title.style.cssText = "font-size: 13px; font-weight: 800; margin-bottom: 4px;"
 
         const scoreText = document.createElement("div")
-        scoreText.textContent = `Skor risiko ${score}/100`
+        scoreText.textContent = `Risk score ${score}/100`
         scoreText.style.cssText = "font-size: 12px; opacity: 0.92;"
 
         const reasonText = document.createElement("div")
@@ -396,7 +432,8 @@ async function showPageToast(tabId, result) {
 }
 
 async function handleAlert(tabId, result) {
-  if (result.status !== "Waspada" && result.status !== "Berisiko") return
+  const statusLabel = getStatusLabel(result.status, result.final_score)
+  if (!isAlertStatus(statusLabel)) return
 
   const settings = await getSettings()
   if (!settings.notificationsEnabled) return
@@ -406,7 +443,7 @@ async function handleAlert(tabId, result) {
   }
 
   if (settings.soundAlerts) {
-    await playSoundAlert(result.status)
+    await playSoundAlert(statusLabel)
   }
 
   await showPageToast(tabId, result)
@@ -445,11 +482,19 @@ async function scanTab(tabId, url, options = {}) {
     }
 
     const result = await analyzeWebsite(payload)
-    console.log("Auto scan result:", result)
+    const enrichedResult = {
+      ...result,
+      is_https: payload.is_https,
+      redirect_count: payload.redirect_count,
+      permissions: payload.permissions || {},
+      cookies: payload.cookies || [],
+    }
 
-    await saveScanResult(result)
-    setBadge(tabId, result)
-    await handleAlert(tabId, result)
+    console.log("Auto scan result:", enrichedResult)
+
+    await saveScanResult(enrichedResult)
+    setBadge(tabId, enrichedResult)
+    await handleAlert(tabId, enrichedResult)
   } catch (error) {
     console.error("Auto scan gagal:", error)
     chrome.action.setBadgeText({ tabId, text: "ERR" })

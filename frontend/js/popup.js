@@ -117,10 +117,11 @@ async function analyzeCurrentWebsite() {
     console.log("Hasil analisis:", result)
 
     // Konversi ke format yang dimengerti frontend
+    const statusLabel = getStatusLabel(result.status, result.final_score)
     const dashboardData = {
       risk_score: result.final_score,
-      risk_level: result.status,
-      message: getRiskMessage(result.status, result.final_score),
+      risk_level: statusLabel,
+      message: getRiskMessage(statusLabel, result.final_score),
       reasons: result.analysis_details,
     }
 
@@ -160,13 +161,25 @@ async function analyzeCurrentWebsite() {
 // =========================
 // HELPER FUNCTIONS
 // =========================
+function getStatusLabel(status, score = 0) {
+  const normalized = status?.toLowerCase()
+
+  if (normalized === "danger" || normalized === "berisiko") return "Danger"
+  if (normalized === "suspicious" || normalized === "waspada") return "Suspicious"
+  if (normalized === "safe" || normalized === "aman") return "Safe"
+
+  if (score > 60) return "Danger"
+  if (score > 25) return "Suspicious"
+  return "Safe"
+}
+
 function getRiskMessage(status, score) {
   const messages = {
-    Berisiko: `⚠️ Website ini memiliki skor risiko tinggi (${score})`,
-    Waspada: `⚠️ Website menunjukkan tanda mencurigakan (${score})`,
-    Aman: `✅ Website ini terlihat aman (${score})`,
+    Danger: `Website has a high risk score (${score})`,
+    Suspicious: `Website shows suspicious signals (${score})`,
+    Safe: `Website looks safe (${score})`,
   }
-  return messages[status] || `Skor risiko: ${score}`
+  return messages[status] || `Risk score: ${score}`
 }
 
 function saveToHistory(data) {
@@ -230,7 +243,7 @@ window.addEventListener("message", (event) => {
 function testWithDummyData() {
   const dummyData = {
     risk_score: 75.5,
-    risk_level: "Berisiko",
+    risk_level: "Danger",
     message: "Website memiliki tingkat risiko tinggi",
     reasons: [
       "URL menggunakan IP Address langsung",

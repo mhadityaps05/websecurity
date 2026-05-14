@@ -12,30 +12,27 @@ document.addEventListener("DOMContentLoaded", () => {
   addExportButton()
 })
 
-function loadHistory() {
-  chrome.storage.local.get(["analysisHistory"], (result) => {
-    console.log("Alerts dari storage:", result.analysisHistory?.length || 0)
+function normalizeStatus(status) {
+  const normalized = status?.toLowerCase()
 
-    // FILTER: Only show Danger and Suspicious/Warning
-    const filteredHistory = (result.analysisHistory || []).filter((item) => {
-      const status = item.status?.toLowerCase()
-      return (
-        status === "berisiko" ||
-        status === "danger" ||
-        status === "waspada" ||
-        status === "suspicious"
-      )
-    })
+  if (normalized === "danger" || normalized === "berisiko") return "danger"
+  if (normalized === "suspicious" || normalized === "waspada") {
+    return "suspicious"
+  }
+  if (normalized === "safe" || normalized === "aman") return "safe"
 
-    console.log("Filtered alerts:", filteredHistory.length)
-    renderHistory(filteredHistory)
-  })
+  return "safe"
+}
+
+function isAlertItem(item) {
+  const status = normalizeStatus(item.status)
+  return status === "danger" || status === "suspicious"
 }
 
 function getAlertPresentation(status) {
-  const normalized = status?.toLowerCase()
+  const normalized = normalizeStatus(status)
 
-  if (normalized === "berisiko" || normalized === "danger") {
+  if (normalized === "danger") {
     return {
       cardClass: "alert-card--danger",
       badgeClass: "status-danger",
@@ -43,7 +40,7 @@ function getAlertPresentation(status) {
     }
   }
 
-  if (normalized === "waspada" || normalized === "suspicious") {
+  if (normalized === "suspicious") {
     return {
       cardClass: "alert-card--warning",
       badgeClass: "status-warning",
@@ -58,116 +55,135 @@ function getAlertPresentation(status) {
   }
 }
 
-function categorizeCookies(cookies) {
-  if (!cookies || !Array.isArray(cookies)) {
-    return null
+function getHostname(url, fallback = "Unknown website") {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return fallback
   }
+}
 
-  const categories = {
-    session: 0,
-    analytics: 0,
-    advertising: 0,
-    security: 0,
-    general: 0,
-  }
-
-  cookies.forEach((cookie) => {
-    const name = cookie.name?.toLowerCase() || ""
-    const domain = cookie.domain?.toLowerCase() || ""
-
-    if (
-      name.includes("session") ||
-      name.includes("auth") ||
-      name.includes("token") ||
-      name.includes("login") ||
-      name.includes("sid") ||
-      name.includes("user")
-    ) {
-      categories.session++
-    } else if (
-      name.includes("_ga") ||
-      name.includes("_gid") ||
-      name.includes("_gat") ||
-      name.includes("analytics") ||
-      name.includes("pixel") ||
-      name.includes("gtm") ||
-      name.includes("utm") ||
-      domain.includes("analytics") ||
-      domain.includes("doubleclick")
-    ) {
-      categories.analytics++
-    } else if (
-      name.includes("ads") ||
-      name.includes("track") ||
-      name.includes("ad_") ||
-      name.includes("_fbp") ||
-      name.includes("_gcl") ||
-      name.includes("marketing") ||
-      name.includes("retarget") ||
-      domain.includes("ad") ||
-      domain.includes("track")
-    ) {
-      categories.advertising++
-    } else if (
-      name.includes("cf_") ||
-      name.includes("secure") ||
-      name.includes("csrf") ||
-      name.includes("xsrf") ||
-      name.includes("__host") ||
-      name.includes("__secure")
-    ) {
-      categories.security++
-    } else {
-      categories.general++
-    }
-  })
-
-  return categories
+function formatDate(value) {
+  if (!value) return ""
+  return new Date(value).toLocaleString()
 }
 
 function formatDomainAge(ageDays) {
-  if (!ageDays || ageDays === 0) return "Unknown"
+  if (!ageDays) return "Unknown"
+  if (ageDays < 30) return `${ageDays} days`
+  if (ageDays < 365) return `${Math.floor(ageDays / 30)} months`
+  return `${Math.floor(ageDays / 365)} years`
+}
 
-  if (ageDays < 1) {
-    return `${Math.round(ageDays * 24)} hours`
-  } else if (ageDays < 30) {
-    return `${ageDays} days`
-  } else if (ageDays < 365) {
-    const months = Math.floor(ageDays / 30)
-    return `${months} month${months > 1 ? "s" : ""}`
-  } else {
-    const years = Math.floor(ageDays / 365)
-    const remainingMonths = Math.floor((ageDays % 365) / 30)
-    if (remainingMonths > 0) {
-      return `${years} year${years > 1 ? "s" : ""} ${remainingMonths} month${remainingMonths > 1 ? "s" : ""}`
-    }
-    return `${years} year${years > 1 ? "s" : ""}`
+function metricCard(label, value, tone = "neutral") {
+  const colors = {
+    neutral: "#e0e6ed",
+    safe: "#48bb78",
+    warning: "#ecc94b",
+    danger: "#fc8181",
   }
+
+  return `
+    <div style="min-width: 0; border-radius: 8px; background: rgba(255,255,255,0.045); padding: 7px 8px;">
+      <div style="font-size: 10px; color: #8b9cb3; margin-bottom: 3px;">${escapeHtml(label)}</div>
+      <div style="font-size: 12px; font-weight: 800; color: ${colors[tone]}; overflow-wrap: anywhere;">${escapeHtml(String(value ?? "-"))}</div>
+    </div>
+  `
+}
+
+function detailSection(title, content) {
+  return `
+    <div style="padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+      <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #8b9cb3; margin-bottom: 8px;">${escapeHtml(title)}</div>
+      ${content}
+    </div>
+  `
+}
+
+function metricGrid(items) {
+  return `
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; overflow: hidden;">
+      ${items.join("")}
+    </div>
+  `
 }
 
 function getPermissionStatus(permissions, permissionName) {
-  if (!permissions) return { status: "N/A", color: "#a0aec0" }
-
-  const status = permissions[permissionName]
+  const status = permissions?.[permissionName]?.toLowerCase()
 
   if (status === "granted") {
-    return { status: "ON", color: "#fc8181" }
-  } else if (status === "denied") {
-    return { status: "OFF", color: "#48bb78" }
-  } else if (status === "prompt") {
-    return { status: "ASK", color: "#ecc94b" }
+    return { label: "ON", tone: "danger" }
   }
 
-  return { status: "N/A", color: "#a0aec0" }
+  if (status === "prompt") {
+    return { label: "ASK", tone: "warning" }
+  }
+
+  if (status === "denied") {
+    return { label: "OFF", tone: "safe" }
+  }
+
+  return { label: "N/A", tone: "neutral" }
 }
 
-function getDomainAgeColor(ageDays) {
-  if (!ageDays || ageDays === 0) return "#a0aec0"
-  if (ageDays < 7) return "#fc8181"
-  if (ageDays < 30) return "#f6ad55"
-  if (ageDays < 90) return "#ecc94b"
-  if (ageDays < 365) return "#68d391"
-  return "#48bb78"
+function buildAlertDetails(item, status) {
+  const score = item.final_score ?? item.score ?? 0
+  const cookiesCount = item.cookies_count ?? item.cookies?.length ?? 0
+  const trackerCount = item.tracker_count ?? 0
+  const iframeCount = item.iframe_count ?? 0
+  const thirdPartyCount =
+    item.third_party_domains_count ?? item.third_party_domains?.length ?? 0
+  const domainAge = item.domain_age_days
+  const isHttps = item.is_https
+  const redirectCount = item.redirect_count ?? 0
+  const permissions = item.permissions || {}
+  const cameraStatus = getPermissionStatus(permissions, "camera")
+  const microphoneStatus = getPermissionStatus(permissions, "microphone")
+  const locationStatus = getPermissionStatus(permissions, "geolocation")
+
+  return `
+    <div class="card-details" style="cursor: default; padding-top: 2px;">
+      ${detailSection(
+        "Security Score",
+        metricGrid([
+          metricCard("Risk Score", `${score}/100`, score > 60 ? "danger" : "warning"),
+          metricCard("HTTPS", isHttps === undefined ? "Unknown" : isHttps ? "Enabled" : "Disabled", isHttps ? "safe" : "danger"),
+          metricCard("Status", status.label, status.label === "Danger" ? "danger" : "warning"),
+        ]),
+      )}
+      ${detailSection(
+        "Domain Information",
+        metricGrid([
+          metricCard("Domain Age", formatDomainAge(domainAge), domainAge > 365 ? "safe" : "neutral"),
+          metricCard("Redirects", `${redirectCount}x`, redirectCount > 2 ? "warning" : "neutral"),
+        ]),
+      )}
+      ${detailSection(
+        "Permission Status",
+        metricGrid([
+          metricCard("Camera", cameraStatus.label, cameraStatus.tone),
+          metricCard("Microphone", microphoneStatus.label, microphoneStatus.tone),
+          metricCard("Location", locationStatus.label, locationStatus.tone),
+        ]),
+      )}
+      ${detailSection(
+        "Content Analysis",
+        metricGrid([
+          metricCard("Total Cookies", cookiesCount, cookiesCount > 30 ? "danger" : "neutral"),
+          metricCard("Trackers", trackerCount, trackerCount > 20 ? "danger" : "neutral"),
+          metricCard("iFrames", iframeCount, iframeCount > 4 ? "warning" : "neutral"),
+          metricCard("3rd Party", thirdPartyCount, thirdPartyCount > 15 ? "warning" : "neutral"),
+        ]),
+      )}
+    </div>
+  `
+}
+
+function loadHistory() {
+  chrome.storage.local.get(["analysisHistory"], (result) => {
+    const filteredHistory = (result.analysisHistory || []).filter(isAlertItem)
+    renderHistory(filteredHistory)
+  })
 }
 
 function renderHistory(history) {
@@ -181,7 +197,7 @@ function renderHistory(history) {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>
         </svg>
         No alerts
-        <div class="empty-state-note">Only Danger and Suspicious alerts appear here</div>
+        <div class="empty-state-note">Only Suspicious and Danger alerts appear here</div>
       </div>
     `
     return
@@ -191,190 +207,25 @@ function renderHistory(history) {
     .map((item, index) => {
       const status = getAlertPresentation(item.status)
       const score = item.final_score ?? item.score
-      const title = item.title || item.url || "Unknown website"
-      const message = item.message || "Security signal detected"
-      const time = item.time ? new Date(item.time).toLocaleString() : ""
-
-      // Get additional details from stored data
-      const cookiesCount = item.cookies_count ?? item.cookies?.length ?? 0
-      const trackerCount = item.tracker_count ?? 0
-      const iframeCount = item.iframe_count ?? 0
-      const redirectCount = item.redirect_count ?? 0
-      const domainAge = item.domain_age_days
-      const thirdPartyCount =
-        item.third_party_domains_count ?? item.third_party_domains?.length ?? 0
-      const isHttps = item.is_https
-      const permissions = item.permissions || {}
-
-      // Get permission statuses
-      const cameraStatus = getPermissionStatus(permissions, "camera")
-      const microphoneStatus = getPermissionStatus(permissions, "microphone")
-      const geolocationStatus = getPermissionStatus(permissions, "geolocation")
-
-      // Categorize cookies
-      const cookieCategories = categorizeCookies(item.cookies)
-
-      // Build details HTML with inline styles
-      let detailsHtml = `
-        <div style="margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">
-          
-          <!-- Security Score Section -->
-          <div style="margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-            <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b9cb3; margin-bottom: 8px;">Security Score</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Risk Score</span>
-                <div style="font-size: 14px; font-weight: 600; color: #e0e6ed;">${score}/100</div>
-              </div>
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">HTTPS</span>
-                <div style="font-size: 13px; font-weight: 500; color: ${isHttps ? "#48bb78" : "#fc8181"};">
-                  ${isHttps ? "Enabled" : "Disabled"}
-                </div>
-              </div>
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Status</span>
-                <div style="font-size: 13px; font-weight: 500; color: ${
-                  status.label === "Safe"
-                    ? "#48bb78"
-                    : status.label === "Suspicious"
-                      ? "#ecc94b"
-                      : "#fc8181"
-                };">
-                  ${status.label}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Domain Information Section -->
-          <div style="margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-            <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b9cb3; margin-bottom: 8px;">Domain Information</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Domain Age</span>
-                <div style="font-size: 13px; font-weight: 500; color: ${getDomainAgeColor(domainAge)};">
-                  ${formatDomainAge(domainAge)}
-                </div>
-              </div>
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Redirects</span>
-                <div style="font-size: 13px; font-weight: 500; color: ${redirectCount > 2 ? "#fc8181" : "#e0e6ed"};">
-                  ${redirectCount}x
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Permission Status Section -->
-          <div style="margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-            <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b9cb3; margin-bottom: 8px;">Permission Status</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Camera</span>
-                <div style="font-size: 13px; font-weight: 600; color: ${cameraStatus.color};">
-                  ${cameraStatus.status}
-                </div>
-              </div>
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Microphone</span>
-                <div style="font-size: 13px; font-weight: 600; color: ${microphoneStatus.color};">
-                  ${microphoneStatus.status}
-                </div>
-              </div>
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Location</span>
-                <div style="font-size: 13px; font-weight: 600; color: ${geolocationStatus.color};">
-                  ${geolocationStatus.status}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Content Analysis Section -->
-          <div style="margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-            <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b9cb3; margin-bottom: 8px;">Content Analysis</div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Total Cookies</span>
-                <div style="font-size: 13px; font-weight: 500; color: ${cookiesCount > 30 ? "#fc8181" : "#e0e6ed"};">
-                  ${cookiesCount}
-                </div>
-              </div>
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">Trackers</span>
-                <div style="font-size: 13px; font-weight: 500; color: ${trackerCount > 20 ? "#fc8181" : "#e0e6ed"};">
-                  ${trackerCount}
-                </div>
-              </div>
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">iFrames</span>
-                <div style="font-size: 13px; font-weight: 500; color: ${iframeCount > 4 ? "#fc8181" : "#e0e6ed"};">
-                  ${iframeCount}
-                </div>
-              </div>
-              <div>
-                <span style="font-size: 10px; color: #6b7c93;">3rd Party</span>
-                <div style="font-size: 13px; font-weight: 500; color: ${thirdPartyCount > 15 ? "#fc8181" : "#e0e6ed"};">
-                  ${thirdPartyCount}
-                </div>
-              </div>
-            </div>
-          </div>`
-
-      // Cookie Categories Section
-      if (cookieCategories) {
-        const totalCategorized = Object.values(cookieCategories).reduce(
-          (a, b) => a + b,
-          0,
-        )
-        if (totalCategorized > 0) {
-          detailsHtml += `
-          <div>
-            <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b9cb3; margin-bottom: 8px;">Cookie Categories (${totalCategorized} total)</div>
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: rgba(255,255,255,0.04); border-radius: 4px;">
-                <span style="font-size: 11px; color: #cbd5e0;">Session</span>
-                <span style="font-size: 11px; font-weight: 600; color: ${cookieCategories.session > 0 ? "#fc8181" : "#a0aec0"}; background: rgba(255,255,255,0.08); padding: 1px 8px; border-radius: 10px;">${cookieCategories.session}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: rgba(255,255,255,0.04); border-radius: 4px;">
-                <span style="font-size: 11px; color: #cbd5e0;">Analytics</span>
-                <span style="font-size: 11px; font-weight: 600; color: ${cookieCategories.analytics > 3 ? "#f6ad55" : "#a0aec0"}; background: rgba(255,255,255,0.08); padding: 1px 8px; border-radius: 10px;">${cookieCategories.analytics}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: rgba(255,255,255,0.04); border-radius: 4px;">
-                <span style="font-size: 11px; color: #cbd5e0;">Advertising</span>
-                <span style="font-size: 11px; font-weight: 600; color: ${cookieCategories.advertising > 0 ? "#fc8181" : "#a0aec0"}; background: rgba(255,255,255,0.08); padding: 1px 8px; border-radius: 10px;">${cookieCategories.advertising}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: rgba(255,255,255,0.04); border-radius: 4px;">
-                <span style="font-size: 11px; color: #cbd5e0;">Security</span>
-                <span style="font-size: 11px; font-weight: 600; color: ${cookieCategories.security > 0 ? "#48bb78" : "#a0aec0"}; background: rgba(255,255,255,0.08); padding: 1px 8px; border-radius: 10px;">${cookieCategories.security}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: rgba(255,255,255,0.04); border-radius: 4px;">
-                <span style="font-size: 11px; color: #cbd5e0;">General</span>
-                <span style="font-size: 11px; font-weight: 600; color: #a0aec0; background: rgba(255,255,255,0.08); padding: 1px 8px; border-radius: 10px;">${cookieCategories.general}</span>
-              </div>
-            </div>
-          </div>`
-        }
-      }
-
-      detailsHtml += `</div>`
+      const hostname = getHostname(item.url, item.title || "Unknown website")
+      const message = item.message || item.reasons?.[0] || "Security signal detected"
+      const time = formatDate(item.time)
 
       return `
-        <div class="alert-card ${status.cardClass} history-item" data-url="${escapeHtml(item.url)}">
+        <div class="alert-card ${status.cardClass} history-item" data-url="${escapeHtml(item.url)}" style="overflow: hidden;">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
-              <div class="card-title break-words">${escapeHtml(title)}</div>
+              <div class="card-title" style="overflow-wrap: anywhere;">${escapeHtml(hostname)}</div>
               ${time ? `<div class="card-meta">${time}</div>` : ""}
             </div>
             <span class="mini-chip">#${history.length - index}</span>
           </div>
-          <div class="card-message">${escapeHtml(message)}</div>
+          <div class="card-message" style="overflow-wrap: anywhere;">${escapeHtml(message)}</div>
           <div class="mt-3 flex flex-wrap items-center gap-2">
             ${score ? `<span class="mini-chip">Score: ${score}/100</span>` : ""}
             <span class="status-badge ${status.badgeClass}">${status.label}</span>
           </div>
-          ${detailsHtml}
+          ${buildAlertDetails(item, status)}
         </div>
       `
     })
@@ -391,7 +242,7 @@ function attachClickListeners() {
 }
 
 function handleClick(event) {
-  if (event.target.closest("details, summary, button, a")) {
+  if (event.target.closest(".card-details, button, a")) {
     return
   }
 
@@ -421,17 +272,7 @@ function clearHistory() {
 
 function exportHistory() {
   chrome.storage.local.get(["analysisHistory"], (result) => {
-    // Export only Danger and Suspicious
-    const history = (result.analysisHistory || []).filter((item) => {
-      const status = item.status?.toLowerCase()
-      return (
-        status === "berisiko" ||
-        status === "danger" ||
-        status === "waspada" ||
-        status === "suspicious"
-      )
-    })
-
+    const history = (result.analysisHistory || []).filter(isAlertItem)
     if (history.length === 0) {
       alert("No alerts to export")
       return

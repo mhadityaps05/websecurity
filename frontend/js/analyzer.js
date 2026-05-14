@@ -4,6 +4,18 @@ import { analyzeWebsite } from "./api.js"
 
 console.log("Analyzer.js loaded")
 
+function getStatusLabel(status, score = 0) {
+  const normalized = status?.toLowerCase()
+
+  if (normalized === "danger" || normalized === "berisiko") return "Danger"
+  if (normalized === "suspicious" || normalized === "waspada") return "Suspicious"
+  if (normalized === "safe" || normalized === "aman") return "Safe"
+
+  if (score > 60) return "Danger"
+  if (score > 25) return "Suspicious"
+  return "Safe"
+}
+
 // =============================
 // GET ACTIVE TAB
 // =============================
@@ -67,7 +79,7 @@ function saveToHistory(analysisResult) {
     // Score and status
     final_score: analysisResult.final_score,
     score: analysisResult.final_score,
-    status: analysisResult.status,
+    status: getStatusLabel(analysisResult.status, analysisResult.final_score),
 
     // Content analysis
     cookies_count: analysisResult.cookies_count || 0,

@@ -37,7 +37,8 @@ function playTone(context, frequency, startTime, duration, volume) {
 async function playAlertSound(status) {
   const context = await getAudioContext()
   const start = context.currentTime + 0.03
-  const isDanger = status === "Berisiko"
+  const normalized = status?.toLowerCase()
+  const isDanger = normalized === "danger" || normalized === "berisiko"
 
   if (isDanger) {
     playTone(context, 880, start, 0.14, 0.18)

@@ -39,18 +39,26 @@ function setupFilters() {
 }
 
 function normalizeStatus(status) {
-  return status?.toLowerCase() || "aman"
+  const normalized = status?.toLowerCase()
+
+  if (normalized === "safe" || normalized === "aman") return "safe"
+  if (normalized === "suspicious" || normalized === "waspada") {
+    return "suspicious"
+  }
+  if (normalized === "danger" || normalized === "berisiko") return "danger"
+
+  return "safe"
 }
 
 function applyFilter(history, filter) {
   let filtered = [...history]
 
   if (filter === "safe") {
-    filtered = history.filter((h) => normalizeStatus(h.status) === "aman")
+    filtered = history.filter((h) => normalizeStatus(h.status) === "safe")
   } else if (filter === "suspicious") {
-    filtered = history.filter((h) => normalizeStatus(h.status) === "waspada")
+    filtered = history.filter((h) => normalizeStatus(h.status) === "suspicious")
   } else if (filter === "danger") {
-    filtered = history.filter((h) => normalizeStatus(h.status) === "berisiko")
+    filtered = history.filter((h) => normalizeStatus(h.status) === "danger")
   }
 
   renderHistory(filtered)
@@ -59,7 +67,7 @@ function applyFilter(history, filter) {
 function getStatusPresentation(status) {
   const normalized = normalizeStatus(status)
 
-  if (normalized === "berisiko") {
+  if (normalized === "danger") {
     return {
       cardClass: "history-card--danger",
       badgeClass: "status-danger",
@@ -67,7 +75,7 @@ function getStatusPresentation(status) {
     }
   }
 
-  if (normalized === "waspada") {
+  if (normalized === "suspicious") {
     return {
       cardClass: "history-card--warning",
       badgeClass: "status-warning",

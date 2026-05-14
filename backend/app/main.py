@@ -49,6 +49,69 @@ OLD_DOMAINS_PATTERNS = [
     '.or.id', '.net.id', '.co.id'
 ]
 
+TRUSTED_ROOT_DOMAINS = {
+    "google.com",
+    "youtube.com",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "github.com",
+    "stackoverflow.com",
+    "wikipedia.org",
+    "reddit.com",
+    "netflix.com",
+    "spotify.com",
+    "amazon.com",
+    "microsoft.com",
+    "apple.com",
+    "linkedin.com",
+    "tokopedia.com",
+    "shopee.co.id",
+    "bukalapak.com",
+    "blibli.com",
+    "gojek.com",
+    "traveloka.com",
+}
+
+BRAND_KEYWORDS = {
+    "google",
+    "youtube",
+    "facebook",
+    "instagram",
+    "twitter",
+    "github",
+    "stackoverflow",
+    "wikipedia",
+    "reddit",
+    "netflix",
+    "spotify",
+    "amazon",
+    "microsoft",
+    "apple",
+    "linkedin",
+    "tokopedia",
+    "shopee",
+    "bukalapak",
+    "blibli",
+    "gojek",
+    "traveloka",
+}
+
+PHISHING_KEYWORDS = [
+    "hadiah", "gratis", "free", "prize", "winner", "bank-login",
+    "update-akun", "verifikasi", "verify", "claim", "reward",
+    "login-verify", "secure-login", "account-update", "confirm",
+    "security-update", "password-reset", "unlock", "suspicious",
+    "gift", "giveaway", "lottery", "jackpot", "whatsapp-web",
+    "login", "signin", "wallet", "bonus", "airdrop"
+]
+
+RISKY_TLDS = {
+    ".zip", ".mov", ".top", ".xyz", ".click", ".quest", ".icu",
+    ".cyou", ".cam", ".tk", ".ml", ".ga", ".cf", ".gq"
+}
+
 
 def extract_root_domain(url: str) -> str:
     """Extract the root domain"""
@@ -88,6 +151,50 @@ def is_educational_or_government(domain: str) -> bool:
         if domain.endswith(pattern):
             return True
     return False
+
+
+def get_root_label(domain: str) -> str:
+    root_domain = extract_root_domain(domain)
+    return root_domain.split(".")[0] if root_domain else domain.split(".")[0]
+
+
+def has_risky_tld(domain: str) -> bool:
+    return any(domain.endswith(tld) for tld in RISKY_TLDS)
+
+
+def has_brand_impersonation(domain: str) -> bool:
+    root_domain = extract_root_domain(domain)
+    root_label = get_root_label(domain)
+
+    if root_domain in TRUSTED_ROOT_DOMAINS:
+        return False
+
+    for brand in BRAND_KEYWORDS:
+        if brand not in root_label:
+            continue
+
+        has_separator_or_suffix = (
+            "-" in root_label or
+            any(char.isdigit() for char in root_label) or
+            any(keyword in root_label for keyword in PHISHING_KEYWORDS)
+        )
+
+        if has_separator_or_suffix or root_label.startswith(brand) or root_label.endswith(brand):
+            return True
+
+    return False
+
+
+def has_suspicious_domain_shape(domain: str) -> bool:
+    root_label = get_root_label(domain)
+
+    return (
+        domain.startswith("xn--") or
+        root_label.count("-") >= 2 or
+        len(root_label) > 24 or
+        sum(char.isdigit() for char in root_label) >= 4 or
+        domain.count(".") > 3
+    )
 
 
 async def method_dns_soa(domain: str) -> Optional[int]:
@@ -292,28 +399,27 @@ def analyze_cookies(cookies: List[Cookie]):
 
 def get_domain_reputation(url: str) -> str:
     domain = urlparse(url).netloc.lower()
-    domain = domain.replace("www.", "")
-    
-    known_patterns = [
-        "youtube", "google", "facebook", "instagram", "twitter", 
-        "github", "stackoverflow", "wikipedia", "reddit", "netflix",
-        "spotify", "amazon", "microsoft", "apple", "linkedin"
-    ]
-    
-    if any(pattern in domain for pattern in known_patterns):
+    domain = domain.split(":")[0].replace("www.", "")
+    root_domain = extract_root_domain(domain)
+
+    # Only exact official root domains are trusted.
+    # Example: google.com is trusted, google-login-example.com is not.
+    if root_domain in TRUSTED_ROOT_DOMAINS:
         return "trusted"
     
     # Educational and government domains are also trusted
-    if is_educational_or_government(domain):
+    if is_educational_or_government(root_domain):
         return "trusted"
     
-    common_tlds = [".com", ".org", ".net", ".co.id", ".id", ".go.id", ".ac.id"]
-    has_common_tld = any(domain.endswith(tld) for tld in common_tlds)
+    # A common TLD like .com is neutral, not a safety signal.
+    if (
+        has_risky_tld(root_domain) or
+        has_brand_impersonation(domain) or
+        has_suspicious_domain_shape(domain)
+    ):
+        return "suspicious"
     
-    if has_common_tld and len(domain) < 30 and domain.count('.') <= 2:
-        return "normal"
-    
-    return "suspicious"
+    return "normal"
 
 
 def detect_phishing_indicators(url: str, domain_age_days: int) -> tuple:
@@ -321,9 +427,26 @@ def detect_phishing_indicators(url: str, domain_age_days: int) -> tuple:
     reasons = []
     url_lower = url.lower()
     parsed = urlparse(url)
-    domain = parsed.netloc.lower()
+    domain = parsed.netloc.lower().split(":")[0]
+    root_domain = extract_root_domain(domain)
     
     reputation = get_domain_reputation(url)
+
+    if reputation == "suspicious":
+        score += 20
+        reasons.append("Pola domain mencurigakan")
+
+    if has_brand_impersonation(domain):
+        score += 45
+        reasons.append(f"Domain menyerupai brand resmi ({root_domain})")
+
+    if has_risky_tld(root_domain):
+        score += 15
+        reasons.append(f"Menggunakan TLD berisiko ({root_domain.split('.')[-1]})")
+
+    if domain.startswith("xn--"):
+        score += 40
+        reasons.append("Domain menggunakan punycode/homograph")
     
     if re.match(r"http[s]?://\d+\.\d+\.\d+\.\d+", url):
         score += 50
@@ -339,6 +462,9 @@ def detect_phishing_indicators(url: str, domain_age_days: int) -> tuple:
         elif domain_age_days < 90 and reputation != "trusted":
             score += 15
             reasons.append(f"Domain relatif baru ({domain_age_days} hari)")
+    elif reputation != "trusted":
+        score += 10
+        reasons.append("Umur domain tidak diketahui")
     
     known_brands = ["google", "facebook", "youtube", "instagram", "twitter", 
                     "microsoft", "apple", "amazon", "netflix", "spotify"]
@@ -358,15 +484,7 @@ def detect_phishing_indicators(url: str, domain_age_days: int) -> tuple:
                 break
     
     if reputation != "trusted":
-        phishing_keywords = [
-            "hadiah", "gratis", "free", "prize", "winner", "bank-login", 
-            "update-akun", "verifikasi", "verify", "claim", "reward",
-            "login-verify", "secure-login", "account-update", "confirm",
-            "security-update", "password-reset", "unlock", "suspicious",
-            "gift", "giveaway", "lottery", "jackpot", "whatsapp-web"
-        ]
-        
-        detected_keywords = [kw for kw in phishing_keywords if kw in url_lower]
+        detected_keywords = [kw for kw in PHISHING_KEYWORDS if kw in url_lower]
         if detected_keywords:
             score += 45
             reasons.append(f"Mengandung keyword phishing: {detected_keywords[0]}")
@@ -408,26 +526,26 @@ def has_legitimate_indicators(data: WebsiteData) -> tuple:
         return bonus, reasons
     
     if data.is_https and data.domain_age_days > 365:
-        bonus -= 20
+        bonus -= 15
         reasons.append("Domain sudah lama dan menggunakan HTTPS")
-    elif data.is_https:
-        bonus -= 10
+    elif data.is_https and data.domain_age_days > 180:
+        bonus -= 8
         reasons.append("Domain menggunakan HTTPS")
     
-    if 5 <= data.tracker_count <= 20:
+    if data.domain_age_days > 180 and 5 <= data.tracker_count <= 20:
         bonus -= 5
     
-    if 10 <= data.cookies_count <= 30:
+    if data.domain_age_days > 180 and 10 <= data.cookies_count <= 30:
         bonus -= 5
     
-    if data.redirect_count <= 1:
-        bonus -= 10
+    if data.domain_age_days > 90 and data.redirect_count <= 1:
+        bonus -= 5
         reasons.append("Tidak ada redirect berlebihan")
     
     sensitive_perms = ["camera", "microphone", "geolocation"]
     has_sensitive = any(data.permissions.get(perm) == "granted" for perm in sensitive_perms)
-    if not has_sensitive:
-        bonus -= 5
+    if data.domain_age_days > 90 and not has_sensitive:
+        bonus -= 3
     
     return bonus, reasons
 

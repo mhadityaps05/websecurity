@@ -48,6 +48,24 @@ function sendMessage(message) {
   })
 }
 
+function storageGet(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(keys, resolve)
+  })
+}
+
+function storageSet(data) {
+  return new Promise((resolve) => {
+    chrome.storage.local.set(data, resolve)
+  })
+}
+
+function storageRemove(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.remove(keys, resolve)
+  })
+}
+
 function applySettings(settings) {
   currentSettings = { ...DEFAULT_SETTINGS, ...settings }
 
@@ -65,12 +83,19 @@ function applySettings(settings) {
 }
 
 async function loadSettings() {
+  const stored = await storageGet(["extensionSettings"])
+  applySettings(stored.extensionSettings || DEFAULT_SETTINGS)
+
   const response = await sendMessage({ type: "GET_EXTENSION_SETTINGS" })
-  applySettings(response.settings || DEFAULT_SETTINGS)
+  if (response.status === "ok" && response.settings) {
+    applySettings(response.settings)
+  }
 }
 
 async function saveSettings(nextSettings, message = "Settings saved") {
   applySettings(nextSettings)
+  await storageSet({ extensionSettings: currentSettings })
+
   const response = await sendMessage({
     type: "UPDATE_EXTENSION_SETTINGS",
     settings: currentSettings,
@@ -79,7 +104,7 @@ async function saveSettings(nextSettings, message = "Settings saved") {
   if (response.status === "ok") {
     setStatus(message)
   } else {
-    setStatus("Failed to save settings")
+    setStatus("Settings saved locally")
   }
 }
 
@@ -100,10 +125,17 @@ clearAllDataBtn?.addEventListener("click", async () => {
   if (!confirmed) return
 
   localStorage.removeItem("lastAnalysis")
+  await storageRemove([
+    "analysisHistory",
+    "lastAnalysis",
+    "lastPageData",
+    "scanHistory",
+    "timestamp",
+  ])
 
   const response = await sendMessage({ type: "CLEAR_EXTENSION_DATA" })
   setStatus(
-    response.status === "ok"
+    response.status === "ok" || response.status === "error"
       ? "All data cleared"
       : "Failed to clear extension data",
   )
@@ -115,14 +147,28 @@ resetExtensionBtn?.addEventListener("click", async () => {
 
   localStorage.removeItem("lastAnalysis")
   localStorage.removeItem("lastPage")
+  await storageRemove([
+    "analysisHistory",
+    "lastAnalysis",
+    "lastPageData",
+    "scanHistory",
+    "timestamp",
+  ])
+  await storageSet({ extensionSettings: DEFAULT_SETTINGS })
 
   const response = await sendMessage({ type: "RESET_EXTENSION" })
   applySettings(response.settings || DEFAULT_SETTINGS)
   setStatus(
-    response.status === "ok"
+    response.status === "ok" || response.status === "error"
       ? "Extension reset"
       : "Failed to reset extension",
   )
 })
 
 document.addEventListener("DOMContentLoaded", loadSettings)
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes.extensionSettings?.newValue) {
+    applySettings(changes.extensionSettings.newValue)
+  }
+})

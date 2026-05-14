@@ -22,8 +22,43 @@ function getColorFromScore(score) {
   return `rgb(${r}, ${g}, ${b})`
 }
 
+function getRiskPresentation(status, score = 0) {
+  const normalized = status?.toLowerCase()
+
+  if (normalized === "danger" || normalized === "berisiko") {
+    return {
+      label: "Danger",
+      message: "Website may be dangerous",
+      color: "#ef4444",
+      background: "rgba(239, 68, 68, 0.16)",
+    }
+  }
+
+  if (normalized === "suspicious" || normalized === "waspada") {
+    return {
+      label: "Suspicious",
+      message: "Suspicious signals detected",
+      color: "#f59e0b",
+      background: "rgba(245, 158, 11, 0.14)",
+    }
+  }
+
+  if (normalized === "safe" || normalized === "aman") {
+    return {
+      label: "Safe",
+      message: "Website looks safe",
+      color: "#10b981",
+      background: "rgba(34, 197, 94, 0.14)",
+    }
+  }
+
+  if (score > 60) return getRiskPresentation("danger", score)
+  if (score > 25) return getRiskPresentation("suspicious", score)
+  return getRiskPresentation("safe", score)
+}
+
 // Fungsi update progress bar
-function updateProgressBar(score) {
+function updateProgressBar(score, status) {
   const circle = document.getElementById("progressCircle")
   const scoreLabel = document.getElementById("scoreLabel")
 
@@ -36,19 +71,10 @@ function updateProgressBar(score) {
   circle.style.strokeDashoffset = offset
   circle.style.stroke = getColorFromScore(normalizedScore)
 
-  if (normalizedScore <= 30) {
-    scoreLabel.innerText = "Low Risk"
-    scoreLabel.style.color = "#10b981"
-    scoreLabel.style.background = "rgba(34, 197, 94, 0.14)"
-  } else if (normalizedScore <= 70) {
-    scoreLabel.innerText = "Medium Risk"
-    scoreLabel.style.color = "#f59e0b"
-    scoreLabel.style.background = "rgba(245, 158, 11, 0.14)"
-  } else {
-    scoreLabel.innerText = "High Risk"
-    scoreLabel.style.color = "#ef4444"
-    scoreLabel.style.background = "rgba(239, 68, 68, 0.16)"
-  }
+  const presentation = getRiskPresentation(status, normalizedScore)
+  scoreLabel.innerText = presentation.label
+  scoreLabel.style.color = presentation.color
+  scoreLabel.style.background = presentation.background
 }
 
 // =============================
@@ -72,18 +98,10 @@ function updateUI(data) {
   let finalScore = parseInt(data.final_score) || 0
   scoreEl.innerText = finalScore
   urlEl.innerText = data.url || "-"
-  updateProgressBar(finalScore)
+  updateProgressBar(finalScore, data.status)
 
-  const status = data.status?.toLowerCase()
-  if (status === "aman") {
-    msgEl.innerText = "Website terlihat aman"
-  } else if (status === "waspada") {
-    msgEl.innerText = "Perlu berhati-hati"
-  } else if (status === "berisiko") {
-    msgEl.innerText = "Website berpotensi berbahaya"
-  } else {
-    msgEl.innerText = data.message || "Status tidak diketahui"
-  }
+  const presentation = getRiskPresentation(data.status, finalScore)
+  msgEl.innerText = data.message || presentation.message
 
   reasonsEl.innerHTML = ""
   if (data.analysis_details && data.analysis_details.length > 0) {
