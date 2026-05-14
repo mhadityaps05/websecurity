@@ -72,6 +72,7 @@ TRUSTED_ROOT_DOMAINS = {
     "blibli.com",
     "gojek.com",
     "traveloka.com",
+    "chatgpt.com",
 }
 
 BRAND_KEYWORDS = {
